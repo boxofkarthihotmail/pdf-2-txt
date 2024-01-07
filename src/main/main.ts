@@ -12,9 +12,18 @@ import path from 'path';
 import { app, BrowserWindow, shell, ipcMain } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import log from 'electron-log';
+import { Poppler } from 'node-poppler';
 import MenuBuilder from './menu';
 import { resolveHtmlPath } from './util';
 
+const poppler = new Poppler();
+const RESOURCES_PATH = app.isPackaged
+  ? path.join(process.resourcesPath, 'assets')
+  : path.join(__dirname, '../../assets');
+
+const getAssetPath = (...paths: string[]): string => {
+  return path.join(RESOURCES_PATH, ...paths);
+};
 class AppUpdater {
   constructor() {
     log.transports.file.level = 'info';
@@ -26,7 +35,19 @@ class AppUpdater {
 let mainWindow: BrowserWindow | null = null;
 
 ipcMain.on('ipc-example', async (event, arg) => {
-  const msgTemplate = (pingPong: string) => `IPC test: ${pingPong}`;
+  let text = '';
+  try {
+    const extractedText = await poppler.pdfToText(getAssetPath('sample.pdf'));
+    text = extractedText;
+  } catch (error: any) {
+    console.error(
+      `Error extracting text from PDF '${getAssetPath('sample.pdf')}':`,
+      error,
+    );
+    text = `Error: ${error?.message}`; // Return the error message instead of null
+  }
+  const msgTemplate = (pingPong: string) =>
+    `IPC test: ${pingPong} \n Pdftext: ${text}`;
   console.log(msgTemplate(arg));
   event.reply('ipc-example', msgTemplate('pong'));
 });
@@ -60,14 +81,6 @@ const createWindow = async () => {
   if (isDebug) {
     await installExtensions();
   }
-
-  const RESOURCES_PATH = app.isPackaged
-    ? path.join(process.resourcesPath, 'assets')
-    : path.join(__dirname, '../../assets');
-
-  const getAssetPath = (...paths: string[]): string => {
-    return path.join(RESOURCES_PATH, ...paths);
-  };
 
   mainWindow = new BrowserWindow({
     show: false,
